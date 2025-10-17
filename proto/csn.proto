@@ -1,0 +1,35 @@
+syntax = "proto3";
+package csn;
+
+option go_package = "github.com/mulat/csn/proto;csnpb";
+
+message Context {
+  string tenant_id = 1;
+  string app_id    = 2;
+  double bw_mbps   = 3;
+  double rtt_ms    = 4;
+  double loss      = 5;
+  double device_cpu= 6;
+  double battery_soc = 7;
+  double edge_cpu  = 8;
+  double input_kb  = 9;
+  double slo_p95_ms= 10;
+}
+
+message PredictRequest { Context ctx = 1; string action = 2; } // e.g., "edge1:med"
+message PredictReply {
+  double mu_latency_ms     = 1;
+  double var_latency       = 2;
+  double mu_energy_j       = 3;
+  double var_energy        = 4;
+  double p95_conformal_ms  = 5;
+}
+
+message DecideRequest {
+  Context ctx = 1;
+  repeated string feasible_actions = 2;
+}
+message DecideReply { string chosen_action = 1; bool explore = 2; }
+
+service Predictor { rpc Predict(PredictRequest) returns (PredictReply); }
+service Decider   { rpc Decide(DecideRequest)   returns (DecideReply); }
