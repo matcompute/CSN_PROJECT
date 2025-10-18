@@ -1,0 +1,52 @@
+name: csn-ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-and-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.18'
+
+      - name: Build Go
+        run: |
+          go version
+          go build ./...
+          go build -o bin/decider ./services/control
+          go build -o bin/predictor ./services/predict
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install fastapi uvicorn onnxruntime numpy lightgbm scikit-learn pandas matplotlib tabulate grpcio grpcio-tools
+
+      - name: Conformal calibration smoke
+        run: |
+          python ml/calibrate_conformal.py
+          test -f models/conformal.json
+
+      - name: Lint (go vet)
+        run: go vet ./...
+
+      - name: Artifact (optional) - analysis figures if present
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: analysis-figures
+          path: |
+            analysis/*.png
+            analysis/*.md
+          if-no-files-found: ignore
