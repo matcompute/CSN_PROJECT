@@ -1,12 +1,22 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-import numpy as np
+import numpy as np, json
 import onnxruntime as ort
+from pathlib import Path
 
-app = FastAPI(title="CSN ONNX Predictor")
+app = FastAPI(title="CSN ONNX Predictor (conformal)")
 
 lat_sess = ort.InferenceSession("models/latency.onnx", providers=["CPUExecutionProvider"])
 en_sess  = ort.InferenceSession("models/energy.onnx",  providers=["CPUExecutionProvider"])
+
+# load conformal q-hat
+_qhat = {"edge:low":8.0,"edge:med":8.0,"edge:high":10.0,"local:med":8.0,"cloud:low":12.0}
+conf = Path("models/conformal.json")
+if conf.exists():
+    data = json.loads(conf.read_text())
+    if "qhat" in data:
+        _qhat.update({k: float(v) for k,v in data["qhat"].items()})
+        print("[conformal] loaded q-hat:", _qhat)
 
 class PredictIn(BaseModel):
     features: list[float]   # [bw, rtt, loss, device_cpu, edge_cpu, input_kb, slo_p95_ms]
@@ -20,7 +30,7 @@ class PredictOut(BaseModel):
     p95_conformal_ms: float
 
 def parse_action(a: str | None):
-    if not a: return "edge", "med"
+    if not a: return "edge","med"
     parts = a.split(":")
     kind = parts[0]
     tier = parts[1] if len(parts) > 1 else "med"
@@ -39,49 +49,34 @@ def predict(inp: PredictIn):
     bw, rtt, loss, device_cpu, edge_cpu, size, slo = map(float, inp.features)
     kind, tier = parse_action(inp.action)
 
-    # Tier multipliers: make HIGH only slightly faster but much more energy hungry
+    # Tier/Kind effects (same as before)
     tier_lat_mult = {"low": 1.25, "med": 1.00, "high": 0.97}[tier]
-    tier_en_mult  = {"low": 0.90, "med": 1.00, "high": 1.40}[tier]  # big energy cost for high
+    tier_en_mult  = {"low": 0.90, "med": 1.00, "high": 1.40}[tier]
 
-    # Kind adjustments: cloud adds WAN latency but reduces device energy; local saves WAN but burns CPU
     if kind == "local":
-        lat_adj = +3.0
-        en_mult = 1.25  # device pays
-        lat_mult = 1.00
-        var_l_mult = 0.9
+        lat_adj = +3.0; en_mult = 1.25; lat_mult = 1.00; var_l_mult = 0.9
     elif kind == "edge":
-        lat_adj = -10.0
-        en_mult = 0.80
-        lat_mult = 0.96
-        var_l_mult = 1.0
-    else:  # cloud
-        lat_adj = +45.0  # WAN + queuing
-        en_mult = 0.70
-        lat_mult = 1.05
-        var_l_mult = 1.3  # riskier tails
+        lat_adj = -10.0; en_mult = 0.80; lat_mult = 0.96; var_l_mult = 1.0
+    else:
+        lat_adj = +45.0; en_mult = 0.70; lat_mult = 1.05; var_l_mult = 1.3
 
-    # Edge load effect: when edge_cpu is high, edge tiers have diminishing returns
     if kind == "edge":
-        # more loaded edge => less benefit from higher tier
-        load_penalty = max(0.0, (edge_cpu - 0.6)) * 40.0  # up to +16ms around 1.0
+        load_penalty = max(0.0, (edge_cpu - 0.6)) * 40.0
         lat_adj += load_penalty
-        # and variance increases with load
         var_l_mult *= (1.0 + max(0.0, edge_cpu - 0.5))
 
-    # Apply adjustments
     lat = max(1.0, (lat * lat_mult * tier_lat_mult) + lat_adj)
     en  = max(0.01, en * en_mult * tier_en_mult)
 
-    # Variance: depend on kind/tier; HIGH is riskier due to resource contention
-    base_var_l = 25.0 * var_l_mult
-    if tier == "low":
-        base_var_l *= 1.25
-    elif tier == "high":
-        base_var_l *= 1.35  # make high-tier tails riskier
-    var_l = base_var_l
+    # variance placeholders (could be learned later)
+    var_l = 25.0 * var_l_mult * (1.35 if tier == "high" else 1.0) * (1.25 if tier == "low" else 1.0)
     var_e = 0.02 if tier == "high" else 0.01
 
-    p95 = lat + 1.645 * (var_l ** 0.5)
+    # conformal p95 = mu + q-hat(kind:tier)
+    bucket = f"{kind}:{tier}"
+    qhat = _qhat.get(bucket, 10.0)
+    p95 = lat + qhat
+
     return PredictOut(
         mu_latency_ms=lat,
         var_latency=var_l,
