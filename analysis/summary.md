@@ -29,15 +29,3 @@
 | 50-80    |       0.752 |
 | 80-120   |       0.790 |
 | 120+     |     nan     |
-
-
-## Figures
-- Latency CDF: `analysis/latency_cdf.png`
-- Action selection share: `analysis/action_share.png`
-- Violation rate by action: `analysis/action_violation.png`
-
-
-## Dynamic scenario figures
-- p95 vs SLO over time: `analysis/dyn_p95_vs_slo.png`
-- Rolling SLO violation rate: `analysis/dyn_rolling_viol.png`
-- Action trajectory: `analysis/dyn_actions.png`
