@@ -19,6 +19,17 @@ mrand "math/rand"
 pb "github.com/mulat/csn/proto"
 )
 
+var capPoller *CapPoller
+
+func actionCostMsWithCap(a string, base float64, capFactor float64) float64 {
+    // apply capacity factor only to EDGE kind
+    k,_ := parseKindTier(a)
+    if k=="edge" {
+        return base * capFactor
+    }
+    return base
+}
+
 type deciderServer struct {
 pb.UnimplementedDeciderServer
 predictor     pb.PredictorClient
@@ -207,7 +218,10 @@ p95eff = mLat + 1.645*math.Sqrt(vLat)
 }
 
 sloPenalty := math.Max(0, p95eff-slo)
-costMs := actionCostMs(a)
+baseCost := actionCostMs(a)
+	var capF = 1.0
+	if capPoller != nil { capF = capPoller.Factor() }
+	costMs := actionCostMsWithCap(a, baseCost, capF)
 alphaEff := s.alphaSLOBase + s.muSLO
 
 U := -(latSample + s.lambdaEnergy*enSample + alphaEff*sloPenalty + costMs) + jitter()
@@ -292,6 +306,18 @@ log.Fatalf("connect predictor: %v", err)
 }
 defer conn.Close()
 pred := pb.NewPredictorClient(conn)
+
+// dynamic capacity: poll Operator metrics if available
+opURL := strings.TrimSpace(os.Getenv("OP_METRICS_URL"))
+if opURL == "" {
+    opURL = "http://127.0.0.1:9103/metrics"
+}
+coef := 0.15
+if v := strings.TrimSpace(os.Getenv("CSN_EDGE_CAP_COEF")); v != "" {
+    if f,err := strconv.ParseFloat(v,64); err==nil && f>=0 { coef = f }
+}
+capPoller = NewCapPoller(opURL, coef, 0.3)
+capPoller.Start()
 
 lis, err := net.Listen("tcp", ":7002")
 if err != nil {
