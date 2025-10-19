@@ -1,0 +1,16 @@
+global:
+  scrape_interval: 2s
+scrape_configs:
+  - job_name: csn-decider
+    static_configs:
+      - targets: ['127.0.0.1:9102']
+        labels: {service: 'decider'}
+  - job_name: csn-operator
+    static_configs:
+      - targets: ['127.0.0.1:9103']
+        labels: {service: 'operator'}
+
+  - job_name: csn-sensing
+    static_configs:
+      - targets: ['127.0.0.1:9104']
+        labels: {service: 'sensing'}
