@@ -1,0 +1,6 @@
+ts,tenant,app,bw_mbps,rtt_ms,loss,device_cpu,edge_cpu,input_kb,slo_p95_ms,action,obs_latency_ms,obs_energy_j
+1760888114,tenantA,app1,35.0,22.0,0.01,0.4,0.2,128.0,150.0,edge1:med,132.0,2.3
+1760892299,tenantA,app1,25.0,18.0,0.005,0.35,0.25,96.0,150.0,edge1:med,128.0,2.1
+1760892305,tenantA,app1,25.0,18.0,0.005,0.35,0.25,96.0,150.0,edge1:med,128.0,2.1
+1760894278,tenantA,app1,25.0,18.0,0.005,0.35,0.25,96.0,150.0,edge1:med,128.0,2.1
+1760894803,tenantA,app1,40.0,25.0,0.002,0.4,0.25,128.0,150.0,edge1:med,120.0,2.0

@@ -1,0 +1,42 @@
+version: "3.9"
+
+services:
+  onnx-predictor:
+    build:
+      context: .
+      dockerfile: ml/Dockerfile
+    image: csn/onnx-predictor:local
+    container_name: csn-onnx
+    # we expose BOTH ports here, since predictor-go shares this network namespace
+    ports:
+      - "8000:8000"  # FastAPI ONNX
+      - "7001:7001"  # Go predictor (shared netns)
+    restart: unless-stopped
+
+  predictor-go:
+    build:
+      context: .
+      dockerfile: services/predict/Dockerfile
+    image: csn/predictor:local
+    container_name: csn-predictor
+    depends_on:
+      - onnx-predictor
+    # share the network namespace with onnx-predictor so 127.0.0.1:8000 works
+    network_mode: "service:onnx-predictor"
+
+  decider:
+    build:
+      context: .
+      dockerfile: services/control/Dockerfile
+    image: csn/decider:local
+    container_name: csn-decider
+    environment:
+      CSN_USE_CONFORMAL: "true"
+      CSN_EDGES_UP: "3"
+      CSN_EDGE_CAP_COEF: "0.15"
+    depends_on:
+      - predictor-go
+    ports:
+      - "7002:7002"  # gRPC decider
+      - "9102:9102"  # metrics (if exposed by your binary)
+    restart: unless-stopped
