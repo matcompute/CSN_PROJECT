@@ -10,6 +10,7 @@ import (
 mrand "math/rand"
 "net"
 "os"
+"strconv"
 "strings"
 "sync"
 "time"
@@ -143,6 +144,24 @@ return float64(sum) / float64(len(s.violWin))
 
 type scored struct{ action string; u float64 }
 
+// ---- NEW: capacity factor helper (env-driven) ----
+func capacityFactor() float64 {
+edgesUp := 1
+if v := strings.TrimSpace(os.Getenv("CSN_EDGES_UP")); v != "" {
+if n, err := strconv.Atoi(v); err == nil && n >= 1 {
+edgesUp = n
+}
+}
+coef := 0.15
+if v := strings.TrimSpace(os.Getenv("CSN_EDGE_CAP_COEF")); v != "" {
+if f, err := strconv.ParseFloat(v, 64); err == nil && f >= 0 {
+coef = f
+}
+}
+// never reduce below 0.3× to avoid runaway bias
+return math.Max(0.3, 1.0-coef*float64(edgesUp-1))
+}
+
 func (s *deciderServer) Decide(ctx context.Context, req *pb.DecideRequest) (*pb.DecideReply, error) {
 bestAction := ""
 bestU := math.Inf(-1)
@@ -156,6 +175,9 @@ scores := make([]scored, 0, len(req.FeasibleActions))
 type obs struct{ a string; p95, slo float64 }
 observed := make([]obs, 0, len(req.FeasibleActions))
 
+// ---- NEW: compute factor once per decision ----
+cf := capacityFactor()
+
 for _, a := range req.FeasibleActions {
 resp, err := s.predictor.Predict(cctx, &pb.PredictRequest{Ctx: req.Ctx, Action: a})
 if err != nil {
@@ -167,6 +189,11 @@ vLat := math.Max(1e-9, float64(resp.VarLatency))
 mEn := float64(resp.MuEnergyJ)
 p95c := float64(resp.P95ConformalMs)
 slo := float64(req.Ctx.SloP95Ms)
+
+// ---- NEW: apply capacity effect to EDGE actions only ----
+if k, _ := parseKindTier(a); k == "edge" {
+mLat = mLat * cf
+}
 
 stdL := math.Min(math.Sqrt(vLat), s.exploreStdCap)
 latSample := mLat + mrand.NormFloat64()*stdL
@@ -293,7 +320,9 @@ updateEvery:   5 * time.Second,
 }
 
 pb.RegisterDeciderServer(s, ds)
-fmt.Printf("Decider listening on :7002 (TS+ε+fairness+SLO) useConformal=%v\n", useConf)
+fmt.Printf("Decider listening on :7002 (TS+ε+fairness+SLO) useConformal=%v capacityFactor=%.3f CSN_EDGES_UP=%s CSN_EDGE_CAP_COEF=%s\n",
+useConf, capacityFactor(), os.Getenv("CSN_EDGES_UP"), os.Getenv("CSN_EDGE_CAP_COEF"),
+)
 if err := s.Serve(lis); err != nil {
 log.Fatalf("serve: %v", err)
 }
