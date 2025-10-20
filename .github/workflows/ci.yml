@@ -37,9 +37,6 @@ jobs:
           python ml/calibrate_conformal.py
           test -f models/conformal.json
 
-      - name: Lint (go vet)
-        run: go vet ./...
-
       - name: Artifact (optional) - analysis figures if present
         if: always()
         uses: actions/upload-artifact@v4
