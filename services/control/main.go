@@ -185,7 +185,8 @@ func (s *deciderServer) Decide(ctx context.Context, req *pb.DecideRequest) (*pb.
 	type obs struct{ a string; p95, slo float64 }
 	observed := make([]obs, 0, len(req.FeasibleActions))
 
-	cf := capacityFactor()
+	cf := 1.0
+	if capPoller != nil { cf = capPoller.Factor() }
 
 	for _, a := range req.FeasibleActions {
 		resp, err := s.predictor.Predict(cctx, &pb.PredictRequest{Ctx: req.Ctx, Action: a})

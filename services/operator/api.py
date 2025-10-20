@@ -44,3 +44,10 @@ def estimate(req: EstimateReq):
 def metrics():
     data = generate_latest()
     return Response(content=data, media_type=CONTENT_TYPE_LATEST)
+
+@app.post("/drain")
+def drain(req: EdgeReq):
+    OPS_TOTAL.labels(endpoint="/drain POST").inc()
+    edges.discard(req.name)
+    EDGES_UP.set(len(edges))
+    return {"ok": True, "edges": sorted(list(edges))}
