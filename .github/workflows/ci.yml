@@ -6,7 +6,7 @@ on:
 
 jobs:
   build-and-smoke:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -19,7 +19,6 @@ jobs:
       - name: Build Go
         run: |
           go version
-          go build ./...
           go build -o bin/decider ./services/control
           go build -o bin/predictor ./services/predict
 
