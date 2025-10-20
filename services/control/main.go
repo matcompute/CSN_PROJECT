@@ -32,6 +32,7 @@ func actionCostMsWithCap(a string, base float64, capFactor float64) float64 {
 }
 
 type deciderServer struct {
+    brk *circuitBreaker
 	pb.UnimplementedDeciderServer
 	predictor     pb.PredictorClient
 	lambdaEnergy  float64
@@ -173,6 +174,9 @@ func capacityFactor() float64 {
 }
 
 func (s *deciderServer) Decide(ctx context.Context, req *pb.DecideRequest) (*pb.DecideReply, error) {
+    // circuit breaker: if open, skip predictor and fallback
+    breakerOpen := s.brk != nil && !s.brk.allow()
+    _ = breakerOpen
 	bestAction := ""
 	bestU := math.Inf(-1)
 
@@ -189,7 +193,14 @@ func (s *deciderServer) Decide(ctx context.Context, req *pb.DecideRequest) (*pb.
 	if capPoller != nil { cf = capPoller.Factor() }
 
 	for _, a := range req.FeasibleActions {
+        if s.brk != nil && !s.brk.allow() {
+            // breaker open: prefer local or lowest-cost action
+            if bestAction == "" && len(req.FeasibleActions) > 0 { bestAction = req.FeasibleActions[0] }
+            continue
+        }
 		resp, err := s.predictor.Predict(cctx, &pb.PredictRequest{Ctx: req.Ctx, Action: a})
+        if err != nil { if s.brk != nil { s.brk.onFailure() } ; continue }
+        if s.brk != nil { s.brk.onSuccess() }
 		if err != nil {
 			continue
 		}
@@ -354,6 +365,13 @@ func main() {
 		lastUpdate:    time.Now(),
 		updateEvery:   5 * time.Second,
 	}
+    // init circuit breaker: 5 consecutive failures -> 10s open
+    ds.brk = newBreaker(5, 10*time.Second)
+    // start exploration governor
+    ds.startExplorationGovernor()
+
+    // start exploration governor
+    ds.startExplorationGovernor()
 
 	pb.RegisterDeciderServer(s, ds)
 	fmt.Printf("Decider listening on :7002 (TS+e+fairness+SLO) useConformal=%v capacityFactor=%.3f CSN_EDGES_UP=%s CSN_EDGE_CAP_COEF=%s\n",
