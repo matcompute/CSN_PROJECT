@@ -1,0 +1,9 @@
+---- counts for phase1.out ----
+     96 edge1
+     24 local
+---- counts for phase2.out ----
+      4 edge1
+    116 local
+---- counts for phase3.out ----
+      2 edge1
+    118 local

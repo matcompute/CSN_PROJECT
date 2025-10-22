@@ -1,0 +1,18 @@
+# HELP csn_drift_score Rolling drift score (|mean - baseline_mean| / baseline_std)
+# TYPE csn_drift_score gauge
+csn_drift_score 0
+# HELP csn_drift_window Number of samples in the rolling window
+# TYPE csn_drift_window gauge
+csn_drift_window 0
+# HELP csn_explore_epsilon Current exploration rate epsilon
+# TYPE csn_explore_epsilon gauge
+csn_explore_epsilon 0.01
+# HELP csn_gamma_fair_ms Current fairness penalty (ms per excess resource unit)
+# TYPE csn_gamma_fair_ms gauge
+csn_gamma_fair_ms 0
+# HELP csn_mu_slo Current SLO Lagrange multiplier
+# TYPE csn_mu_slo gauge
+csn_mu_slo 0
+# HELP csn_viol_rate Rolling SLO violation rate
+# TYPE csn_viol_rate gauge
+csn_viol_rate 1

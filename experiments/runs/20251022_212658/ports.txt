@@ -1,0 +1,5 @@
+predictor 1041           mulat    3u  IPv6  24592      0t0  TCP *:7001 (LISTEN)
+uvicorn   1042           mulat   13u  IPv4   1016      0t0  TCP *:9103 (LISTEN)
+uvicorn   2283           mulat   13u  IPv4  19450      0t0  TCP 127.0.0.1:8000 (LISTEN)
+decider   2433           mulat    6u  IPv6  28920      0t0  TCP *:7002 (LISTEN)
+decider   2433           mulat    7u  IPv6  29746      0t0  TCP *:9102 (LISTEN)
