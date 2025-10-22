@@ -85,6 +85,7 @@ return base
 // --- Decider server ----------------------------------------------------------
 
 type deciderServer struct {
+ 	quota *quotaManager
 // resilience
 brk *circuitBreaker
 
@@ -116,7 +117,6 @@ lastUpdate  time.Time
 updateEvery time.Duration
 
 // Admission/Quota
-quota *quotaManager
 }
 
 func (s *deciderServer) fairnessPenalty(tenant string, a string) float64 {
@@ -190,6 +190,12 @@ return math.Max(0.3, 1.0-coef*float64(edgesUp-1))
 }
 
 func (s *deciderServer) Decide(ctx context.Context, req *pb.DecideRequest) (*pb.DecideReply, error) {
+ 	// quota admission: deny if tenant exceeds credits
+		t := req.Ctx.GetTenantId()
+		if t == "" { t = "default" }
+		if s.quota != nil && !s.quota.allow(t, 1.0) {
+			return &pb.DecideReply{ChosenAction: "local:low", Explore: false}, nil
+		}
 // --- Admission/Quota: deny early if tenant exceeds credits ---
 tenantID := req.Ctx.GetTenantId()
 if tenantID == "" {
@@ -422,6 +428,8 @@ ds.brk = newBreaker(5, 10*time.Second)
 ds.quota = newQuotaManager(50.0, 100.0)
 
 // exploration governor (exports csn_explore_epsilon)
+ 	// admission/quota: 50 rps, burst 100 tokens per-tenant
+		ds.quota = newQuotaManager(50.0, 100.0)
 ds.startExplorationGovernor()
 
 pb.RegisterDeciderServer(s, ds)
